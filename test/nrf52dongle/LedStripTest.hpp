@@ -13,8 +13,8 @@ constexpr int LEDSTRIP_LENGTH = 300;
 struct Drivers {
 	Loop_RTC0 loop;
 	LedStrip_I2S ledStrip{loop,
-		gpio::Config::P1_14, // SCK (not needed)
-		gpio::Config::P0_2,//gpio::P1(15), // LRCK (not needed)
+		gpio::Config::P1_14, // SCK (not needed, but needs a valid pin)
+		gpio::Config::P0_2,// LRCK (not needed, but needs a valid pin)
 		gpio::Config::P0_3, // data
 		1125ns, // bit time T
 		75us}; // reset time

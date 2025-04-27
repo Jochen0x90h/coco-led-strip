@@ -6,6 +6,7 @@
 
 
 namespace {
+// include generated table, see generator subdirectory
 #include "bitTable_I2S.hpp"
 }
 
@@ -17,7 +18,7 @@ LedStrip_I2S::LedStrip_I2S(Loop_Queue &loop, gpio::Config sckPin, gpio::Config l
     , loop(loop)
 {
     // debug start indicator pin
-    //gpio::configureOutput(P0(19), false);
+    //gpio::configureOutput(gpio::Config::P0_19, false);
 
     // configure I2S pins
     gpio::configureAlternate(dataPin);
@@ -80,7 +81,7 @@ void LedStrip_I2S::handle() {
             uint8_t *end2 = src + (LED_BUFFER_SIZE - size);
             uint8_t *end = std::min(end2, this->end);
 
-            // destination
+            // destination buffer
             int offset = this->offset;
             uint32_t *dst = this->buffer + offset;
             uintptr_t ptr = uintptr_t(dst);
@@ -107,7 +108,19 @@ void LedStrip_I2S::handle() {
                 break;
             }
 
-            // end of data: update buffer fill size
+            // copy data finished (application buffer is not accessed any more)
+            //gpio::setOutput(gpio::Config::P0_19, true);
+
+            // notify the application that the buffer is finished (next buffer can be started only after reset time)
+            this->transfers.pop(
+                [this](BufferBase &buffer) {
+                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
+                    this->loop.push(buffer);
+                    return true;
+                }
+            );
+
+            // update LED buffer fill size
             this->size = size + (end - begin);
 
             // go to reset phase
@@ -152,37 +165,25 @@ void LedStrip_I2S::handle() {
                 break;
             }
 
-            // clear finished: update buffer fill size
+            // reset finished: update buffer fill size
             this->size = size + toClear;
 
-            // go to finished phase
-            this->phase = Phase::FINISHED;
-        }
-        // fall through
-    case Phase::FINISHED:
-        {
-            this->phase = Phase::IDLE;
-
-            // set debug start indicator pin
-            //gpio::setOutput(P0(19), true);
-
-            this->transfers.pop(
-                [this](BufferBase &buffer) {
-                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
-                    this->loop.push(buffer);
-                    return true;
-                },
+            // start next buffer if there is one
+            this->transfers.visitFirst(
                 [](BufferBase &next) {
                     // start next transfer if there is one
                     next.start();
                 }
             );
-
-            // clear debug start indicator pin
-            //gpio::setOutput(P0(19), false);
         }
-        if (this->phase != Phase::IDLE)
+
+        // break if a new buffer was started
+        if (this->phase != Phase::RESET)
             break;
+
+        // go to idle phase
+        this->phase = Phase::IDLE;
+
         // fall through
     case Phase::IDLE:
         // let I2S run for some more cycles
@@ -214,7 +215,8 @@ void LedStrip_I2S::handle() {
             this->phase = Phase::STOPPED;
         }
         break;
-    default:
+    case Phase::STOPPED:
+        // nothing to do
         ;
     }
 }
@@ -242,9 +244,12 @@ bool LedStrip_I2S::BufferBase::start(Op op) {
 
     auto &device = this->device;
 
-    // add to list of pending transfers and start immediately if list was empty
-    if (device.transfers.push(nvic::Guard(I2S_IRQn), *this))
-        start();
+    // add to list of pending transfers and start immediately if list was empty and not in RESET phase
+    {
+        nvic::Guard guard(I2S_IRQn);
+        if (device.transfers.push(*this) && device.phase >= Phase::IDLE)
+            start();
+    }
 
     // set state
     setBusy();
@@ -268,8 +273,7 @@ bool LedStrip_I2S::BufferBase::cancel() {
 }
 
 void LedStrip_I2S::BufferBase::start() {
-    // set debug start indicator pin
-    //gpio::setOutput(P0(19), true);
+    //gpio::setOutput(gpio::Config::P0_19, false);
 
     auto &device = this->device;
     auto i2s = NRF_I2S;
@@ -287,24 +291,20 @@ void LedStrip_I2S::BufferBase::start() {
     // get curren phase
     auto ph = device.phase;
 
+    // start with copy phase
     device.phase = Phase::COPY;
-    device.handle();
 
+    // copy first data when STOPPED (called from start(op)) or RESET (called from handle() for next buffer)
+    if (ph != Phase::IDLE)
+        device.handle();
+
+    // start I2S when STOPPED (called from start(op) after a pause)
     if (ph == Phase::STOPPED)
         i2s->TASKS_START = TRIGGER;
-
-    // clear debug start indicator pin
-    //gpio::setOutput(P0(19), false);
 }
 
 void LedStrip_I2S::BufferBase::handle() {
-    // set debug start indicator pin
-    //gpio::setOutput(P0(19), true);
-
     setReady();
-
-    // clear debug start indicator pin
-    //gpio::setOutput(P0(19), false);
 }
 
 } // namespace coco

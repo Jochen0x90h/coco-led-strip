@@ -3,6 +3,7 @@
 
 
 namespace {
+// include generated table, see generator subdirectory
 #include "bitTable_UART.hpp"
 }
 
@@ -15,67 +16,52 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
     : BufferDevice(State::READY)
     , loop(loop)
     , txPin(txPin)
-    , uart(uartInfo.usart), uartIrq(uartInfo.irq)
+    , uartIrq(uartInfo.irq)
     , resetCount(resetCount)
 {
-    //gpio::configureOutput(gpio::PA(15), false);
+    // debug signal, (Nucleo board: CN9 1)
+    //gpio::configureOutput(gpio::Config::PC5 | gpio::Config::SPEED_HIGH, false);
 
-    // enable clocks (note two cycles wait time until peripherals can be accessed, see STM32G4 reference manual section 7.2.17)
-    uartInfo.rcc.enableClock();
+    // enable clock
     dmaInfo.rcc.enableClock();
 
-    // configure UART TX pin (mode gets set to alternate function in start())
-    //gpio::configure(txPin, false, gpio::Config::OUTPUT | gpio::Config::SPEED_HIGH);
-
-    // configure UART TX pin (mode gets set to output during reset time)
+    // configure UART TX pin (mode is set to alternate when data is sent and to output during reset time)
     gpio::setOutput(txPin, false);
     gpio::configureAlternate(txPin);
 
     // initialize UART
-    auto uart = uartInfo.usart;
-    nvic::setPriority(this->uartIrq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
-
-    // set baud rate (minimum is 8)
-    uart->BRR = ((brr & ~7) << 1) | (brr & 7);
-
-    // set configuration registers
-    uart->CR3 = USART_CR3_DMAT; // TX DMA mode
-#ifndef STM32F4 // STM32F4 does not support inverting, therefore the output is inverted (use e.g. 74hct1g04 to also level shift to 5V)
-    uart->CR2 = USART_CR2_DATAINV // start and stop bits of UART are inverted, therefore also invert data
-        | (extract(txPin, gpio::Config::INVERT) ? 0 : USART_CR2_TXINV); // invert output according to INVERT flag
+#ifdef HAVE_USART_DATA_7
+    usart::Config config = usart::Config::DATA_7 | usart::Config::STOP_1 | usart::Config::LSB_FIRST;
+#else
+    usart::Config config = usart::Config::DATA_8 | usart::Config::STOP_1 | usart::Config::LSB_FIRST;
 #endif
-    uart->CR1 = USART_CR1_OVER8 // 8x oversampling
-#ifdef USART_CR1_M1
-        | USART_CR1_M1 // 7 bit
+
+    // invert output if requested. If TXINV is not supported, the output is inverted (use e.g. 74hct1g04 to invert)
+#ifdef USART_CR2_TXINV
+    uint32_t cr2 = extract(txPin, gpio::Config::INVERT) ? 0 : USART_CR2_TXINV;
+#else
+    uint32_t cr2 = 0;
 #endif
-        | USART_CR1_UE; // enable UART
+
+    auto uart = this->uart = uartInfo.init()
+        .setBaudRate8x(brr)
+        .configure(config,
+            USART_CR1_OVER8, // 8x oversampling
+            cr2,
+            USART_CR3_DMAT); // TX DMA mode
 
     // initialize TX DMA channel
-    this->dmaStatus = dmaInfo.status();
     this->dmaChannel = dmaInfo.channel();
-#ifdef STM32F4
-    this->dmaChannel.setPeripheralAddress(&uart->DR);
-#else
-    this->dmaChannel.setPeripheralAddress(&uart->TDR);
-#endif
+    this->dmaChannel.setTxPeripheralAddress(&uart.txRegister());
 
     // map DMA to UART TX
     uartInfo.mapTx(dmaInfo);
 
     // enable transmitter
-    auto cr1 = uart->CR1;
-    uart->CR1 = cr1 | USART_CR1_TE;
-#ifndef STM32F4 // STM32F4 does not support inverting, therefore the output is inverted (use e.g. inverting level shifter from 3.3V to 5V)
-    while ((uart->ISR & USART_ISR_TEACK) == 0);
-#endif
+    uart.enableTx();
 
-    //debug::setRed();
-
-    /*uart->TDR = 0x05;
-    while (true) {
-
-    }*/
-
+    nvic::setPriority(this->uartIrq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
+    nvic::setPriority(dmaInfo.irq, nvic::Priority::MEDIUM);
     nvic::enable(dmaInfo.irq);
 }
 
@@ -98,7 +84,7 @@ void LedStrip_UART_DMA::handle() {
     dmaChannel.disable();
 
     // clear interrupt flag
-    this->dmaStatus.clear(dma::Status::Flags::TRANSFER_COMPLETE);
+    this->dmaChannel.clearStatus(dma::Channel::Status::TRANSFER_COMPLETE);
 
     switch (this->phase) {
     case Phase::COPY:
@@ -113,7 +99,7 @@ void LedStrip_UART_DMA::handle() {
             uint32_t *dst = this->buffer;
 
             // set DMA pointer
-            dmaChannel.setMemoryAddress(dst);
+            dmaChannel.setTxMemoryAddress(dst);
 
             // copy/convert
             for (; src < end; src += 3, dst += 2) {
@@ -134,8 +120,7 @@ void LedStrip_UART_DMA::handle() {
             // check if more source data to transfer
             if (end < this->end) {
                 // enable DMA
-                dmaChannel.enable(dma::Channel::Config::TX
-                    | dma::Channel::Config::TRANSFER_COMPLETE_INTERRUPT);
+                dmaChannel.enableTx(dma::Channel::Config::TRANSFER_COMPLETE_INTERRUPT);
 
                 // advance source data pointer
                 this->data = end;
@@ -144,10 +129,22 @@ void LedStrip_UART_DMA::handle() {
                 break;
             }
 
-            // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead)
-            dmaChannel.enable(dma::Channel::Config::TX);
+            // copy data finished  (application buffer is not accessed any more)
 
-            // enable UART transmission complete interrupt (TC flag gets cleared automatically by new data)
+            // notify the application that the buffer is finished (next buffer can be started only after reset time)
+            this->transfers.pop(
+                [this](BufferBase &buffer) {
+                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
+                    this->loop.push(buffer);
+                    return true;
+                }
+            );
+
+            // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead
+            // because we want to disable the tx pin after the last bit was sent)
+            dmaChannel.enableTx();
+
+            // enable UART transmission complete interrupt (TC flag gets cleared automatically by the new data)
             uart->CR1 = uart->CR1 | USART_CR1_TCIE;
 
             // go to reset phase
@@ -156,19 +153,21 @@ void LedStrip_UART_DMA::handle() {
         break;
     case Phase::RESET:
         {
-            // set tx pin to output, state is low
+            // set tx pin low (configure as output instead of UART TX)
             gpio::setMode(this->txPin, gpio::Mode::OUTPUT);
+
+            // debug signal
+            //gpio::setOutput(gpio::Config::PC5, true);
 
             // clear first byte of buffer (not necessary as TX pin is permanently low)
             //this->buffer[0] = 0;
 
-            // dummy DMA transfer to measure reset time
-            dmaChannel.setMemoryAddress(this->buffer);
+            // dummy DMA transfer to measure reset time (new data also clears TC flag of UART)
+            dmaChannel.setTxMemoryAddress(this->buffer);
             dmaChannel.setCount(this->resetCount);
-            dmaChannel.enable(dma::Channel::Config::MEMORY_TO_PERIPHERAL);
+            dmaChannel.enableTxDummy();
 
-            // enable transmission complete interrupt (TC flag gets cleared automatically by new data)
-            uart->CR1 = uart->CR1 | USART_CR1_TCIE;
+            // transmission complete interrupt stays enabled
 
             // go to finished phase
             this->phase = Phase::FINISHED;
@@ -176,14 +175,16 @@ void LedStrip_UART_DMA::handle() {
         break;
     case Phase::FINISHED:
         {
+            // debug signal
+            //gpio::setOutput(gpio::Config::PC5, false);
+
+            // disable transmission complete interrupt
+            uart->CR1 = uart->CR1 & ~(USART_CR1_TCIE);
+
             this->phase = Phase::STOPPED;
 
-            this->transfers.pop(
-                [this](BufferBase &buffer) {
-                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
-                    this->loop.push(buffer);
-                    return true;
-                },
+            // start next buffer if there is one
+            this->transfers.visitFirst(
                 [](BufferBase &next) {
                     // start next transfer if there is one
                     next.start();
@@ -191,7 +192,8 @@ void LedStrip_UART_DMA::handle() {
             );
         }
         break;
-    default:
+    case Phase::STOPPED:
+        // nothing to do
         ;
     }
 }
@@ -220,8 +222,12 @@ bool LedStrip_UART_DMA::BufferBase::start(Op op) {
     auto &device = this->device;
 
     // add to list of pending transfers and start immediately if list was empty
-    if (device.transfers.push(nvic::Guard(device.uartIrq), *this))
-        start();
+    {
+        // DMA irq does not need to be disabled because changes to the transfers queue are not done during DMA irq
+        nvic::Guard guard(device.uartIrq);
+        if (device.transfers.push(*this) && device.phase == Phase::STOPPED)
+            start();
+    }
 
     // set state
     setBusy();
