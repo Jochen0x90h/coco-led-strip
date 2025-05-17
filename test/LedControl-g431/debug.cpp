@@ -7,7 +7,7 @@
 namespace coco {
 namespace debug {
 
-const auto txPin = gpio::Config::PC10 | gpio::Config::AF7;
+const auto txPin = gpio::PC10 | gpio::AF7;
 #define UART_INFO usart::USART3_INFO
 constexpr auto uartClock = USART3_CLOCK;
 constexpr auto uartConfig = usart::Config::DEFAULT;

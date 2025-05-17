@@ -11,7 +11,7 @@ namespace coco {
 
 // LedStrip_UART_DMA
 
-LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const usart::Info &uartInfo,
+LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const UartInfo &uartInfo,
     const dma::Info &dmaInfo, uint32_t brr, int resetCount)
     : BufferDevice(State::READY)
     , loop(loop)
@@ -21,9 +21,6 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
 {
     // debug signal, (Nucleo board: CN9 1)
     //gpio::configureOutput(gpio::Config::PC5 | gpio::Config::SPEED_HIGH, false);
-
-    // enable clock
-    dmaInfo.rcc.enableClock();
 
     // configure UART TX pin (mode is set to alternate when data is sent and to output during reset time)
     gpio::setOutput(txPin, false);
@@ -36,8 +33,8 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
     usart::Config config = usart::Config::DATA_8 | usart::Config::STOP_1 | usart::Config::LSB_FIRST;
 #endif
 
-    // invert output if requested. If TXINV is not supported, the output is inverted (use e.g. 74hct1g04 to invert)
-#ifdef USART_CR2_TXINV
+    // invert output if requested. If TXINV is not supported, the output is always inverted (use e.g. 74hct1g04 to invert)
+#ifdef HAVE_USART_PIN_INVERT
     uint32_t cr2 = extract(txPin, gpio::Config::INVERT) ? 0 : USART_CR2_TXINV;
 #else
     uint32_t cr2 = 0;
@@ -51,8 +48,8 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
             USART_CR3_DMAT); // TX DMA mode
 
     // initialize TX DMA channel
-    this->dmaChannel = dmaInfo.channel();
-    this->dmaChannel.setTxPeripheralAddress(&uart.txRegister());
+    this->dmaChannel = dmaInfo.init<DmaChannel>()
+        .setDestinationAddress(&uart.txRegister());
 
     // map DMA to UART TX
     uartInfo.mapTx(dmaInfo);
@@ -60,7 +57,7 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
     // enable transmitter
     uart.enableTx();
 
-    nvic::setPriority(this->uartIrq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
+    nvic::setPriority(uartInfo.irq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
     nvic::setPriority(dmaInfo.irq, nvic::Priority::MEDIUM);
     nvic::enable(dmaInfo.irq);
 }
@@ -84,7 +81,7 @@ void LedStrip_UART_DMA::handle() {
     dmaChannel.disable();
 
     // clear interrupt flag
-    this->dmaChannel.clearStatus(dma::Channel::Status::TRANSFER_COMPLETE);
+    dmaChannel.clearStatus(dma::Status::TRANSFER_COMPLETE);
 
     switch (this->phase) {
     case Phase::COPY:
@@ -99,7 +96,7 @@ void LedStrip_UART_DMA::handle() {
             uint32_t *dst = this->buffer;
 
             // set DMA pointer
-            dmaChannel.setTxMemoryAddress(dst);
+            dmaChannel.setSourceAddress(dst);
 
             // copy/convert
             for (; src < end; src += 3, dst += 2) {
@@ -120,7 +117,7 @@ void LedStrip_UART_DMA::handle() {
             // check if more source data to transfer
             if (end < this->end) {
                 // enable DMA
-                dmaChannel.enableTx(dma::Channel::Config::TRANSFER_COMPLETE_INTERRUPT);
+                dmaChannel.enable(dma::Config::TRANSFER_COMPLETE_INTERRUPT);
 
                 // advance source data pointer
                 this->data = end;
@@ -142,7 +139,7 @@ void LedStrip_UART_DMA::handle() {
 
             // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead
             // because we want to disable the tx pin after the last bit was sent)
-            dmaChannel.enableTx();
+            dmaChannel.enable();
 
             // enable UART transmission complete interrupt (TC flag gets cleared automatically by the new data)
             uart->CR1 = uart->CR1 | USART_CR1_TCIE;
@@ -163,9 +160,9 @@ void LedStrip_UART_DMA::handle() {
             //this->buffer[0] = 0;
 
             // dummy DMA transfer to measure reset time (new data also clears TC flag of UART)
-            dmaChannel.setTxMemoryAddress(this->buffer);
-            dmaChannel.setCount(this->resetCount);
-            dmaChannel.enableTxDummy();
+            dmaChannel.setSourceAddress(this->buffer)
+                .setCount(this->resetCount)
+                .enable(dma::Config::DEFAULT, dma::Increment::NONE);
 
             // transmission complete interrupt stays enabled
 

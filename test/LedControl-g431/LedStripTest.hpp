@@ -25,7 +25,7 @@ struct Drivers {
     // LED strip
     using LedStrip = LedStrip_UART_DMA;
     LedStrip ledStrip{loop,
-        gpio::Config::PC4 | gpio::Config::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (RS485_TX)
+        gpio::PC4 | gpio::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (RS485_TX)
         usart::USART1_INFO,
         dma::DMA1_CH1_INFO,
         USART1_CLOCK,
@@ -36,7 +36,7 @@ struct Drivers {
 
     Drivers() {
         // set RS485_DE high
-        gpio::configureOutput(gpio::Config::PB0, true);
+        gpio::configureOutput(gpio::PB0, true);
 
         // enable reference voltage
         //vref::configure(vref::Config::INTERNAL_2V048);

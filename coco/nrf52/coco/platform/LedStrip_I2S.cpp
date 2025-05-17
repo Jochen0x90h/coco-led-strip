@@ -24,10 +24,10 @@ LedStrip_I2S::LedStrip_I2S(Loop_Queue &loop, gpio::Config sckPin, gpio::Config l
     gpio::configureAlternate(dataPin);
     auto i2s = NRF_I2S;
     //i2s->PSEL.MCK = DISCONNECTED;
-    i2s->PSEL.SCK = gpio::getPinIndex(sckPin);
-    i2s->PSEL.LRCK = gpio::getPinIndex(lrckPin);
+    i2s->PSEL.SCK = gpio::getPinPortIndex(sckPin);
+    i2s->PSEL.LRCK = gpio::getPinPortIndex(lrckPin);
     //i2s->PSEL.SDIN = DISCONNECTED;
-    i2s->PSEL.SDOUT = gpio::getPinIndex(dataPin);
+    i2s->PSEL.SDOUT = gpio::getPinPortIndex(dataPin);
 
     // initialize I2S
     i2s->CONFIG.MODE = N(I2S_CONFIG_MODE_MODE, Master);
