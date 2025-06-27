@@ -36,10 +36,10 @@ struct Drivers {
 
     Drivers() {
         // set RS485_DE high
-        gpio::configureOutput(gpio::PB0, true);
+        gpio::enableOutput(gpio::PB0, true);
 
         // enable reference voltage
-        //vref::configure(vref::Config::INTERNAL_2V048);
+        //vref::enable(vref::Config::INTERNAL_2V048);
     }
 };
 

@@ -20,42 +20,39 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
     , resetCount(resetCount)
 {
     // debug signal, (Nucleo board: CN9 1)
-    //gpio::configureOutput(gpio::Config::PC5 | gpio::Config::SPEED_HIGH, false);
+    //gpio::enableOutput(gpio::PC5 | gpio::Config::SPEED_HIGH, false);
 
     // configure UART TX pin (mode is set to alternate when data is sent and to output during reset time)
     gpio::setOutput(txPin, false);
-    gpio::configureAlternate(txPin);
+    gpio::enableAlternate(txPin);
 
     // initialize UART
+    auto config = usart::Config::OVER_8
+#ifdef HAVE_USART_INVERT_RX_TX
+        // invert output if requested. If TXINV is not supported, the output is always inverted (use e.g. 74hct1g04 to invert)
+        | ((txPin & gpio::Config::INVERT) != 0 ? usart::Config::NONE : usart::Config::INVERT_TX)
+#endif
+        ;
+
 #ifdef HAVE_USART_DATA_7
-    usart::Config config = usart::Config::DATA_7 | usart::Config::STOP_1 | usart::Config::LSB_FIRST;
+    auto format = usart::Format::DATA_7 | usart::Format::STOP_1 | usart::Format::LSB_FIRST;
 #else
-    usart::Config config = usart::Config::DATA_8 | usart::Config::STOP_1 | usart::Config::LSB_FIRST;
+    auto format = usart::Format::DATA_8 | usart::Format::STOP_1 | usart::Format::LSB_FIRST;
 #endif
 
-    // invert output if requested. If TXINV is not supported, the output is always inverted (use e.g. 74hct1g04 to invert)
-#ifdef HAVE_USART_PIN_INVERT
-    uint32_t cr2 = extract(txPin, gpio::Config::INVERT) ? 0 : USART_CR2_TXINV;
-#else
-    uint32_t cr2 = 0;
-#endif
-
-    auto uart = this->uart = uartInfo.init()
-        .setBaudRate8x(brr)
-        .configure(config,
-            USART_CR1_OVER8, // 8x oversampling
-            cr2,
-            USART_CR3_DMAT); // TX DMA mode
+    auto uart = this->uart = uartInfo.enableClock()
+        .initBRR8x(brr)
+        .enable(config, format,
+            usart::Function::TX, // enable transmitter
+            usart::Interrupt::NONE,
+            usart::DmaRequest::TX); // enable TX DMA request
 
     // initialize TX DMA channel
-    this->dmaChannel = dmaInfo.init<DmaChannel>()
+    this->dmaChannel = dmaInfo.enableClock<DmaChannel>()
         .setDestinationAddress(&uart.txRegister());
 
     // map DMA to UART TX
     uartInfo.mapTx(dmaInfo);
-
-    // enable transmitter
-    uart.enableTx();
 
     nvic::setPriority(uartInfo.irq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
     nvic::setPriority(dmaInfo.irq, nvic::Priority::MEDIUM);
@@ -154,7 +151,7 @@ void LedStrip_UART_DMA::handle() {
             gpio::setMode(this->txPin, gpio::Mode::OUTPUT);
 
             // debug signal
-            //gpio::setOutput(gpio::Config::PC5, true);
+            //gpio::setOutput(gpio::PC5, true);
 
             // clear first byte of buffer (not necessary as TX pin is permanently low)
             //this->buffer[0] = 0;
@@ -173,7 +170,7 @@ void LedStrip_UART_DMA::handle() {
     case Phase::FINISHED:
         {
             // debug signal
-            //gpio::setOutput(gpio::Config::PC5, false);
+            //gpio::setOutput(gpio::PC5, false);
 
             // disable transmission complete interrupt
             uart->CR1 = uart->CR1 & ~(USART_CR1_TCIE);

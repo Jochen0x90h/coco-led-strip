@@ -41,7 +41,7 @@ namespace coco {
 ///   DMA
 class LedStrip_UART_DMA : public BufferDevice {
 protected:
-    using UartInfo = usart::Info<usart::Features::BAUD_RATE>;
+    using UartInfo = usart::Info<usart::Feature::BAUD_RATE | usart::Feature::ASYNC_MODE>;
 
     LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const UartInfo &uartInfo, const dma::Info &dmaInfo,
         uint32_t brr, int resetCount);
@@ -54,8 +54,7 @@ public:
     /// @param clock Peripheral clock frequency (APB1_CLOCK or APB2_CLOCK depending on USART)
     /// @param bitTime Bit time T where T0H is T/3 and T1H is 2T/3, e.g. T = 1125ns -> T0H = 375ns, T1H = 750ns
     /// @param resetTime Reset time in us, e.g. 20μs
-    template <usart::Features F>
-    LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const usart::Info<F> &uartInfo, const dma::Info &dmaInfo,
+    LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const UartInfo &uartInfo, const dma::Info &dmaInfo,
         Kilohertz<> clock, Nanoseconds<> bitTime, Microseconds<> resetTime) : LedStrip_UART_DMA(loop, txPin,
         uartInfo, dmaInfo, std::max(int(clock * bitTime / 3) + 1, 8), int(clock / ((int(clock * bitTime / 3) + 1) * 9) * resetTime)) {}
 
@@ -131,11 +130,11 @@ protected:
     gpio::Config txPin;
 
     // uart
-    usart::Registers<usart::Features::BAUD_RATE> uart;
+    UartInfo::Instance uart;
     int uartIrq;
 
     // dma
-    using DmaChannel = dma::Channel2<dma::Mode::MEMORY_TO_PERIPHERAL, dma::Size::BITS_8, dma::Size::BITS_8>;
+    using DmaChannel = dma::Channel<dma::Mode::MEMORY_TO_PERIPHERAL, dma::Size::BITS_8, dma::Size::BITS_8>;
     DmaChannel dmaChannel;
 
     // list of buffers

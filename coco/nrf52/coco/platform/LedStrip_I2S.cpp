@@ -18,10 +18,10 @@ LedStrip_I2S::LedStrip_I2S(Loop_Queue &loop, gpio::Config sckPin, gpio::Config l
     , loop(loop)
 {
     // debug start indicator pin
-    //gpio::configureOutput(gpio::Config::P0_19, false);
+    //gpio::enableOutput(gpio::Config::P0_19, false);
 
     // configure I2S pins
-    gpio::configureAlternate(dataPin);
+    gpio::enableAlternate(dataPin);
     auto i2s = NRF_I2S;
     //i2s->PSEL.MCK = DISCONNECTED;
     i2s->PSEL.SCK = gpio::getPinPortIndex(sckPin);
