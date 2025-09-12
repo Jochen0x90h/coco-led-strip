@@ -107,7 +107,7 @@ protected:
 
     // buffer for 2 x 16 LEDs
     static constexpr int LED_BUFFER_SIZE = 16 * 3;
-    uint32_t buffer[2 * LED_BUFFER_SIZE];
+    volatile uint32_t buffer[2 * LED_BUFFER_SIZE];
     int offset = 0;
     int size = 0;
 

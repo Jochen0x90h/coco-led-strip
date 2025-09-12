@@ -83,7 +83,7 @@ void LedStrip_I2S::handle() {
 
             // destination buffer
             int offset = this->offset;
-            uint32_t *dst = this->buffer + offset;
+            volatile uint32_t *dst = this->buffer + offset;
             uintptr_t ptr = uintptr_t(dst);
             dst += size;
 
@@ -139,10 +139,10 @@ void LedStrip_I2S::handle() {
 
             // destination
             int offset = this->offset;
-            uint32_t *dst = this->buffer + offset;
+            volatile uint32_t *dst = this->buffer + offset;
             uintptr_t ptr = uintptr_t(dst);
             dst += size;
-            uint32_t *end = dst + toClear;
+            volatile uint32_t *end = dst + toClear;
 
             // clear
             for (; dst != end; ++dst) {
@@ -193,9 +193,9 @@ void LedStrip_I2S::handle() {
 
             // destination
             int offset = this->offset;
-            uint32_t *dst = this->buffer + offset;
+            volatile uint32_t *dst = this->buffer + offset;
             uintptr_t ptr = uintptr_t(dst);
-            uint32_t *end = dst + LED_BUFFER_SIZE;
+            volatile uint32_t *end = dst + LED_BUFFER_SIZE;
             dst += size;
 
             // clear

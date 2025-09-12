@@ -11,15 +11,15 @@ namespace coco {
 
 // LedStrip_UART_DMA
 
-LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const UartInfo &uartInfo,
-    const dma::Info &dmaInfo, uint32_t brr, int resetCount)
+LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin,
+    const UartInfo &uartInfo, const dma::Info<> &dmaInfo, uint32_t brr, int resetCount)
     : BufferDevice(State::READY)
     , loop(loop)
     , txPin(txPin)
     , uartIrq(uartInfo.irq)
     , resetCount(resetCount)
 {
-    // debug signal, (Nucleo board: CN9 1)
+    // debug signal (Nucleo board: CN9 1)
     //gpio::enableOutput(gpio::PC5 | gpio::Config::SPEED_HIGH, false);
 
     // configure UART TX pin (mode is set to alternate when data is sent and to output during reset time)
@@ -48,7 +48,7 @@ LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const
             usart::DmaRequest::TX); // enable TX DMA request
 
     // initialize TX DMA channel
-    this->dmaChannel = dmaInfo.enableClock<DmaChannel>()
+    this->dmaChannel = dmaInfo.enableClock<DmaChannel::MODE>()
         .setDestinationAddress(&uart.txRegister());
 
     // map DMA to UART TX
@@ -90,7 +90,7 @@ void LedStrip_UART_DMA::handle() {
             uint8_t *end = std::min(src + LED_BUFFER_SIZE, this->end);
 
             // destination
-            uint32_t *dst = this->buffer;
+            volatile uint32_t *dst = this->buffer;
 
             // set DMA pointer
             dmaChannel.setSourceAddress(dst);
@@ -158,8 +158,9 @@ void LedStrip_UART_DMA::handle() {
 
             // dummy DMA transfer to measure reset time (new data also clears TC flag of UART)
             dmaChannel.setSourceAddress(this->buffer)
+                .configureTransfer()
                 .setCount(this->resetCount)
-                .enable(dma::Config::DEFAULT, dma::Increment::NONE);
+                .enable();//dma::Config::DEFAULT, dma::Increment::NONE);
 
             // transmission complete interrupt stays enabled
 
