@@ -54,7 +54,7 @@ public:
         void start();
         void handle() override;
 
-        LedStrip_I2S &device;
+        LedStrip_I2S &device_;
     };
 
     /// @brief Buffer for transferring data to LED strip.
@@ -62,10 +62,10 @@ public:
     template <int C>
     class Buffer : public BufferBase {
     public:
-        Buffer(LedStrip_I2S &device) : BufferBase(data, C, device) {}
+        Buffer(LedStrip_I2S &device) : BufferBase(data_, C, device) {}
 
     protected:
-        alignas(4) uint8_t data[C];
+        alignas(4) uint8_t data_[C];
     };
 
 
@@ -86,30 +86,30 @@ public:
 protected:
     void handle();
 
-    Loop_Queue &loop;
+    Loop_Queue &loop_;
 
     // list of buffers
-    IntrusiveList<BufferBase> buffers;
+    IntrusiveList<BufferBase> buffers_;
 
     // list of active transfers
-    InterruptQueue<BufferBase> transfers;
+    InterruptQueue<BufferBase> transfers_;
 
     // data to transfer
-    uint8_t *data;
-    uint8_t *end;
+    uint8_t *data_;
+    uint8_t *end_;
 
     // reset after data
-    int resetWords;
-    int resetCount;
+    int resetWords_;
+    int resetCount_;
 
     // number of idle buffers to send when no new data arrives
-    int idleCount;
+    int idleCount_;
 
     // buffer for 2 x 16 LEDs
     static constexpr int LED_BUFFER_SIZE = 16 * 3;
-    volatile uint32_t buffer[2 * LED_BUFFER_SIZE];
-    int offset = 0;
-    int size = 0;
+    volatile uint32_t buffer_[2 * LED_BUFFER_SIZE];
+    int offset_ = 0;
+    int size_ = 0;
 
     enum class Phase {
         // copy data into the LED buffer
@@ -124,7 +124,7 @@ protected:
         // nothing to do, I2S is stopped
         STOPPED
     };
-    Phase phase = Phase::STOPPED;
+    Phase phase_ = Phase::STOPPED;
 };
 
 } // namespace coco

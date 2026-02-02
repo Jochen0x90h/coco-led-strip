@@ -25,7 +25,7 @@ LedStrip_emu::Buffer &LedStrip_emu::getBuffer(int index) {
 void LedStrip_emu::handle(Gui &gui) {
     auto buffer = this->transfers.pop();
     if (buffer != nullptr) {
-        gui.draw<GuiLedStrip>(buffer->p.data, buffer->p.size / 3);
+        gui.draw<GuiLedStrip>(buffer->data_, buffer->size_ / 3);
         buffer->setReady();
     } else {
         // draw emulated LED strip with previous content
@@ -44,7 +44,7 @@ LedStrip_emu::Buffer::Buffer(int length, LedStrip_emu &device)
 }
 
 LedStrip_emu::Buffer::~Buffer() {
-    delete [] this->p.data;
+    delete [] this->data_;
 }
 
 bool LedStrip_emu::Buffer::start(Op op) {

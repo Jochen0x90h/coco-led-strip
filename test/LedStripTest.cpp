@@ -85,7 +85,7 @@ struct DoubleBufferStrip {
 
 // test correct timing, bit order and RGB order
 template <typename S>
-Coroutine effect1(Loop &loop, S &strip) {
+Coroutine testRgb(Loop &loop, S &strip) {
     while (true) {
         // get time in milliseconds
         auto time = int((loop.now() - Loop::Time(0)) / 5ms);
@@ -114,9 +114,9 @@ Coroutine effect1(Loop &loop, S &strip) {
     }
 }
 
-// simple fading effect
+// moving color ramps
 template <typename S>
-Coroutine effect2(Loop &loop, S &strip) {
+Coroutine colorRamps(Loop &loop, S &strip) {
     while (true) {
         // get time in milliseconds
         auto time = int((loop.now() - Loop::Time(0)) / 1ms);
@@ -146,10 +146,16 @@ Coroutine effect2(Loop &loop, S &strip) {
 
 
 int main() {
+    debug::out << "LedStripTest\n";
+
     //SingleBufferStrip strip(drivers.buffer);
     DoubleBufferStrip strip(drivers.buffer1, drivers.buffer2);
-    effect1(drivers.loop, strip);
-    //effect2(drivers.loop, strip);
+
+    // test correct assignment of RGB channels
+    // LEDs should fade on/off up in this order R, G, B, off, R, G, B, off ...
+    testRgb(drivers.loop, strip);
+
+    //colorRamps(drivers.loop, strip);
 
     drivers.loop.run();
     return 0;

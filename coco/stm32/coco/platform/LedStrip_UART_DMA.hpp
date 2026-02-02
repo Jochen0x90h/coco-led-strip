@@ -6,7 +6,7 @@
 #include <coco/platform/Loop_Queue.hpp>
 #include <coco/platform/dma.hpp>
 #include <coco/platform/gpio.hpp>
-#include <coco/platform/usart.hpp>
+#include <coco/platform/uart.hpp>
 #include <coco/platform/nvic.hpp>
 
 
@@ -41,7 +41,7 @@ namespace coco {
 ///   DMA
 class LedStrip_UART_DMA : public BufferDevice {
 protected:
-    using UartInfo = usart::Info<usart::Feature::BAUD_RATE | usart::Feature::ASYNC_MODE>;
+    using UartInfo = uart::Info<uart::Feature::BAUD_RATE | uart::Feature::ASYNC_MODE>;
 
     /// @brief Internal constructor
     /// @param loop Event loop
@@ -88,7 +88,7 @@ public:
         void start();
         void handle() override;
 
-        LedStrip_UART_DMA &device;
+        LedStrip_UART_DMA &device_;
     };
 
     /// @brief Buffer for transferring data over UART.
@@ -96,10 +96,10 @@ public:
     template <int C>
     class Buffer : public BufferBase {
     public:
-        Buffer(LedStrip_UART_DMA &device) : BufferBase(data, C, device) {}
+        Buffer(LedStrip_UART_DMA &device) : BufferBase(data_, C, device) {}
 
     protected:
-        alignas(4) uint8_t data[((C + 2) / 3) * 3];
+        alignas(4) uint8_t data_[((C + 2) / 3) * 3];
     };
 
 
@@ -107,60 +107,53 @@ public:
     int getBufferCount() override;
     BufferBase &getBuffer(int index) override;
 
-    /// @brief UART interrupt handler, needs to be called from global USART/UART interrupt handler (e.g. USART1_IRQHandler() for usart::USART1_INFO on STM32G4)
+    /// @brief UART interrupt handler, needs to be called from global USART/UART interrupt handler (e.g. USART1_IRQHandler() for uart::USART1_INFO on STM32G4)
     ///
     void UART_IRQHandler() {
-        auto uart = this->uart;
-
         // check if transmission has completed
-#ifdef STM32F4
-        if ((uart->SR & USART_SR_TC) != 0) {
-#else
-        if ((uart->ISR & USART_ISR_TC) != 0) {
-#endif
+        if ((uart_.status() & uart::Status::TX_COMPLETE) != 0)
             handle();
-        }
     }
 
     /// @brief DMA interrupt handler, needs to be called from DMA channel interrupt handler (e.g. DMA1_Channel1_IRQHandler() for dma::DMA1_CH1_INFO on STM32G4)
     ///
     void DMA_IRQHandler() {
         // check if receive has completed
-        if ((this->dmaChannel.status() & dma::Status::TRANSFER_COMPLETE) != 0)
+        if ((dmaChannel_.status() & dma::Status::TRANSFER_COMPLETE) != 0)
             handle();
     }
 
 protected:
     void handle();
 
-    Loop_Queue &loop;
+    Loop_Queue &loop_;
 
-    gpio::Config txPin;
+    gpio::Config txPin_;
 
     // uart
-    UartInfo::Instance uart;
-    int uartIrq;
+    UartInfo::Instance uart_;
+    int uartIrq_;
 
     // dma
     using DmaChannel = dma::Channel<dma::Mode::TX8>;
-    DmaChannel dmaChannel;
+    DmaChannel dmaChannel_;
 
     // list of buffers
-    IntrusiveList<BufferBase> buffers;
+    IntrusiveList<BufferBase> buffers_;
 
     // list of active transfers
-    InterruptQueue<BufferBase> transfers;
+    InterruptQueue<BufferBase> transfers_;
 
     // data to transfer
-    uint8_t *data;
-    uint8_t *end;
+    uint8_t *data_;
+    uint8_t *end_;
 
     // reset after data
-    int resetCount;
+    int resetCount_;
 
     // buffer for 2 x 16 LEDs
     static constexpr int LED_BUFFER_SIZE = 16 * 3;
-    volatile uint32_t buffer[(LED_BUFFER_SIZE * 4) / 3 / 2]; // need 4 x uint16_t for one LED which are 3 bytes
+    volatile uint32_t buffer_[(LED_BUFFER_SIZE * 4) / 3 / 2]; // need 4 x uint16_t for one LED which are 3 bytes
 
     enum class Phase {
         // copy data into the LED buffer
@@ -175,7 +168,7 @@ protected:
         // nothing to do
         STOPPED
     };
-    Phase phase = Phase::STOPPED;
+    Phase phase_ = Phase::STOPPED;
 };
 
 } // namespace coco
