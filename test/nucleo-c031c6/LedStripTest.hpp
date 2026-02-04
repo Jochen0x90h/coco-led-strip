@@ -1,6 +1,6 @@
 #pragma once
 
-#include <coco/platform/Loop_TIM2.hpp>
+#include <coco/platform/Loop_TIM.hpp>
 #include <coco/platform/LedStrip_UART_DMA.hpp>
 #include <coco/board/config.hpp>
 
@@ -11,12 +11,12 @@ constexpr int LEDSTRIP_LENGTH = 300;
 
 // drivers for LedStripTest
 struct Drivers {
-	Loop_TIM2 loop{APB1_TIMER_CLOCK};
+	Loop_TIM loop{timer::TIM3_INFO, APB_TIMER_CLOCK};
 
 	using LedStrip = LedStrip_UART_DMA;
 	LedStrip ledStrip{loop,
-		gpio::Config::PA9 | gpio::Config::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (CN5 1)
-		usart::USART1_INFO,
+		gpio::PA9 | gpio::AF1 | gpio::Config::SPEED_HIGH, // USART1 TX (CN5 1)
+		uart::USART1_INFO,
 		dma::DMA1_CH1_INFO,
 		USART1_CLOCK,
 		1125ns, // bit time T

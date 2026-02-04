@@ -55,14 +55,15 @@ ENTRY(Reset_Handler)
 /* Highest address of the user mode stack */
 _estack = ORIGIN(RAM) + LENGTH(RAM);    /* end of RAM */
 /* Generate a link error if heap and stack don't fit into RAM */
-_Min_Heap_Size = 0x200;      /* required amount of heap  */
+_Min_Heap_Size = 0x200;  /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Specify the memory areas */
 MEMORY
 {
-  RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 32K
   FLASH (rx)     : ORIGIN = 0x8000000, LENGTH = 128K
+  RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 32K
+  CCMRAM (xrw)   : ORIGIN = 0x10000000, LENGTH = 0K
 }
 
 /* Define output sections */
@@ -75,6 +76,25 @@ SECTIONS
     KEEP(*(.isr_vector)) /* Startup code */
     . = ALIGN(4);
   } >FLASH
+
+
+  /* Get address of .ccmram in flash */
+  _siccmram = LOADADDR(.ccmram);
+
+  /* CCMRAM section for fast execution
+   * Use __attribute__((section(".ccmram"))) to place functions into CCMRAM
+   * Note: Needs modified startup code!
+   */
+  .ccmram :
+  {
+    . = ALIGN(4);
+    _sccmram = .; /* define a global symbols at ccmram start */
+    *(.ccmram)
+    *(.ccmram*)
+    . = ALIGN(4);
+    _eccmram = .; /* define a global symbols at ccmram end */
+  } >CCMRAM AT> FLASH
+
 
   /* The program code and other data goes into FLASH */
   .text :
@@ -130,6 +150,7 @@ SECTIONS
     PROVIDE_HIDDEN (__fini_array_end = .);
   } >FLASH
 
+
   /* used by the startup to initialize data */
   _sidata = LOADADDR(.data);
 
@@ -162,6 +183,7 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :
   {
@@ -172,7 +194,6 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
-
 
 
   /* Remove information from the standard libraries */

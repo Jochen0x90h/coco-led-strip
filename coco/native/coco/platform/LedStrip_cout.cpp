@@ -29,8 +29,8 @@ void LedStrip_cout::handle() {
         static const char lookup[] = " `.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@@";
         const int size = std::size(lookup) - 2;
 
-        int count = buffer->p.size / 3;
-        Color *colors = (Color*)buffer->p.data;
+        int count = buffer->size_ / 3;
+        Color *colors = (Color*)buffer->data_;
         for (int i = 0; i < count; ++i) {
             Color color = colors[i];
             int intensity = int((0.30f * color.r + 0.59f * color.g + 0.11f * color.b) / 255.0f * size);
@@ -57,7 +57,7 @@ LedStrip_cout::Buffer::Buffer(int length, LedStrip_cout &device)
 }
 
 LedStrip_cout::Buffer::~Buffer() {
-    delete [] this->p.data;
+    delete [] this->data_;
 }
 
 bool LedStrip_cout::Buffer::start(Op op) {

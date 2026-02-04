@@ -3,6 +3,7 @@
 
 
 namespace {
+// include generated table, see generator subdirectory
 #include "bitTable_UART.hpp"
 }
 
@@ -10,72 +11,53 @@ namespace coco {
 
 // LedStrip_UART_DMA
 
-LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const usart::Info &uartInfo,
-    const dma::Info &dmaInfo, uint32_t brr, int resetCount)
+LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin,
+    const UartInfo &uartInfo, const dma::Info<> &dmaInfo, uint32_t brr, int resetCount)
     : BufferDevice(State::READY)
-    , loop(loop)
-    , txPin(txPin)
-    , uart(uartInfo.usart), uartIrq(uartInfo.irq)
-    , resetCount(resetCount)
+    , loop_(loop)
+    , txPin_(txPin)
+    , uartIrq_(uartInfo.irq)
+    , resetCount_(resetCount)
 {
-    //gpio::configureOutput(gpio::PA(15), false);
+    // debug signal (Nucleo board: CN9 1)
+    //gpio::enableOutput(gpio::PC5 | gpio::Config::SPEED_HIGH, false);
 
-    // enable clocks (note two cycles wait time until peripherals can be accessed, see STM32G4 reference manual section 7.2.17)
-    uartInfo.rcc.enableClock();
-    dmaInfo.rcc.enableClock();
-
-    // configure UART TX pin (mode gets set to alternate function in start())
-    //gpio::configure(txPin, false, gpio::Config::OUTPUT | gpio::Config::SPEED_HIGH);
-
-    // configure UART TX pin (mode gets set to output during reset time)
+    // configure UART TX pin (mode is set to alternate when data is sent and to output during reset time)
     gpio::setOutput(txPin, false);
-    gpio::configureAlternate(txPin);
+    gpio::enableAlternate(txPin);
 
     // initialize UART
-    auto uart = uartInfo.usart;
-    nvic::setPriority(this->uartIrq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
-
-    // set baud rate (minimum is 8)
-    uart->BRR = ((brr & ~7) << 1) | (brr & 7);
-
-    // set configuration registers
-    uart->CR3 = USART_CR3_DMAT; // TX DMA mode
-#ifndef STM32F4 // STM32F4 does not support inverting, therefore the output is inverted (use e.g. 74hct1g04 to also level shift to 5V)
-    uart->CR2 = USART_CR2_DATAINV // start and stop bits of UART are inverted, therefore also invert data
-        | (extract(txPin, gpio::Config::INVERT) ? 0 : USART_CR2_TXINV); // invert output according to INVERT flag
+    auto config = uart::Config::OVER_8
+#ifdef HAVE_USART_INVERT_RX_TX
+        // invert output if requested. If TXINV is not supported, the output is always inverted (use e.g. 74hct1g04 to invert)
+        | ((txPin & gpio::Config::INVERT) != 0 ? uart::Config::NONE : uart::Config::INVERT_TX)
 #endif
-    uart->CR1 = USART_CR1_OVER8 // 8x oversampling
-#ifdef USART_CR1_M1
-        | USART_CR1_M1 // 7 bit
+        ;
+
+#ifdef HAVE_USART_DATA_7
+    auto format = uart::Format::DATA_7 | uart::Format::STOP_1 | uart::Format::LSB_FIRST;
+#else
+    auto format = uart::Format::DATA_8 | uart::Format::STOP_1 | uart::Format::LSB_FIRST;
 #endif
-        | USART_CR1_UE; // enable UART
+
+    auto uart = uart_ = uartInfo.enableClock()
+        .enable(config, format, uart::calcBrrOver8(brr),
+            uart::Interrupt::NONE,
+            uart::DmaRequest::TX) // enable TX DMA request
+        .startTx();
 
     // initialize TX DMA channel
-    this->dmaStatus = dmaInfo.status();
-    this->dmaChannel = dmaInfo.channel();
-#ifdef STM32F4
-    this->dmaChannel.setPeripheralAddress(&uart->DR);
-#else
-    this->dmaChannel.setPeripheralAddress(&uart->TDR);
-#endif
+    dmaChannel_ = dmaInfo.enableClock<DmaChannel::MODE>()
+        .setDestinationAddress(&uart.txRegister());
 
     // map DMA to UART TX
     uartInfo.mapTx(dmaInfo);
 
-    // enable transmitter
-    auto cr1 = uart->CR1;
-    uart->CR1 = cr1 | USART_CR1_TE;
-#ifndef STM32F4 // STM32F4 does not support inverting, therefore the output is inverted (use e.g. inverting level shifter from 3.3V to 5V)
-    while ((uart->ISR & USART_ISR_TEACK) == 0);
-#endif
+    // clear interrupts
+    uart.clear(uart::Status::ALL);
 
-    //debug::setRed();
-
-    /*uart->TDR = 0x05;
-    while (true) {
-
-    }*/
-
+    nvic::setPriority(uartInfo.irq, nvic::Priority::MEDIUM); // interrupt gets enabled in first call to start()
+    nvic::setPriority(dmaInfo.irq, nvic::Priority::MEDIUM);
     nvic::enable(dmaInfo.irq);
 }
 
@@ -83,37 +65,37 @@ LedStrip_UART_DMA::~LedStrip_UART_DMA() {
 }
 
 int LedStrip_UART_DMA::getBufferCount() {
-    return this->buffers.count();
+    return buffers_.count();
 }
 
 LedStrip_UART_DMA::BufferBase &LedStrip_UART_DMA::getBuffer(int index) {
-    return this->buffers.get(index);
+    return buffers_.get(index);
 }
 
 void LedStrip_UART_DMA::handle() {
-    auto uart = this->uart;
-    auto dmaChannel = this->dmaChannel;
+    auto uart = uart_;
+    auto dmaChannel = dmaChannel_;
 
     // disable DMA
     dmaChannel.disable();
 
     // clear interrupt flag
-    this->dmaStatus.clear(dma::Status::Flags::TRANSFER_COMPLETE);
+    dmaChannel.clear(dma::Status::TRANSFER_COMPLETE);
 
-    switch (this->phase) {
+    switch (phase_) {
     case Phase::COPY:
         {
             //gpio::setOutput(gpio::PA(15), true);
 
             // source data
-            uint8_t *src = this->data;
-            uint8_t *end = std::min(src + LED_BUFFER_SIZE, this->end);
+            uint8_t *src = data_;
+            uint8_t *end = std::min(src + LED_BUFFER_SIZE, end_);
 
             // destination
-            uint32_t *dst = this->buffer;
+            volatile uint32_t *dst = buffer_;
 
             // set DMA pointer
-            dmaChannel.setMemoryAddress(dst);
+            dmaChannel.setSourceAddress(dst);
 
             // copy/convert
             for (; src < end; src += 3, dst += 2) {
@@ -129,61 +111,77 @@ void LedStrip_UART_DMA::handle() {
             //gpio::setOutput(gpio::PA(15), false);
 
             // set DMA count
-            dmaChannel.setCount(uintptr_t(dst) - uintptr_t(this->buffer));
+            dmaChannel.setCount(uintptr_t(dst) - uintptr_t(buffer_));
 
             // check if more source data to transfer
-            if (end < this->end) {
+            if (end < end_) {
                 // enable DMA
-                dmaChannel.enable(dma::Channel::Config::TX
-                    | dma::Channel::Config::TRANSFER_COMPLETE_INTERRUPT);
+                dmaChannel.enable(dma::Config::TRANSFER_COMPLETE_INTERRUPT);
 
                 // advance source data pointer
-                this->data = end;
+                data_ = end;
 
                 // stay in copy phase
                 break;
             }
 
-            // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead)
-            dmaChannel.enable(dma::Channel::Config::TX);
+            // copy data finished  (application buffer is not accessed any more)
 
-            // enable UART transmission complete interrupt (TC flag gets cleared automatically by new data)
+            // notify the application that the buffer is finished (next buffer can be started only after reset time)
+            transfers_.pop(
+                [this](BufferBase &buffer) {
+                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
+                    loop_.push(buffer);
+                    return true;
+                }
+            );
+
+            // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead
+            // because we want to disable the tx pin after the last bit was sent)
+            dmaChannel.enable();
+
+            // enable UART transmission complete interrupt (TC flag gets cleared automatically by the new data)
             uart->CR1 = uart->CR1 | USART_CR1_TCIE;
 
             // go to reset phase
-            this->phase = Phase::RESET;
+            phase_ = Phase::RESET;
         }
         break;
     case Phase::RESET:
         {
-            // set tx pin to output, state is low
-            gpio::setMode(this->txPin, gpio::Mode::OUTPUT);
+            // set tx pin low (configure as output instead of UART TX)
+            gpio::setMode(txPin_, gpio::Mode::OUTPUT);
+
+            // debug signal
+            //gpio::setOutput(gpio::PC5, true);
 
             // clear first byte of buffer (not necessary as TX pin is permanently low)
-            //this->buffer[0] = 0;
+            //buffer[0] = 0;
 
-            // dummy DMA transfer to measure reset time
-            dmaChannel.setMemoryAddress(this->buffer);
-            dmaChannel.setCount(this->resetCount);
-            dmaChannel.enable(dma::Channel::Config::MEMORY_TO_PERIPHERAL);
+            // dummy DMA transfer to measure reset time (new data also clears TC flag of UART)
+            dmaChannel.setSourceAddress(buffer_)
+                .configure()
+                .setCount(resetCount_)
+                .enable();//dma::Config::DEFAULT, dma::Increment::NONE);
 
-            // enable transmission complete interrupt (TC flag gets cleared automatically by new data)
-            uart->CR1 = uart->CR1 | USART_CR1_TCIE;
+            // transmission complete interrupt stays enabled
 
             // go to finished phase
-            this->phase = Phase::FINISHED;
+            phase_ = Phase::FINISHED;
         }
         break;
     case Phase::FINISHED:
         {
-            this->phase = Phase::STOPPED;
+            // debug signal
+            //gpio::setOutput(gpio::PC5, false);
 
-            this->transfers.pop(
-                [this](BufferBase &buffer) {
-                    // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
-                    this->loop.push(buffer);
-                    return true;
-                },
+            // disable transmission complete interrupt
+            uart->CR1 = uart->CR1 & ~(USART_CR1_TCIE);
+
+            phase_ = Phase::STOPPED;
+
+            // start next buffer if there is one
+            transfers_.visitFirst(
                 [](BufferBase &next) {
                     // start next transfer if there is one
                     next.start();
@@ -191,7 +189,8 @@ void LedStrip_UART_DMA::handle() {
             );
         }
         break;
-    default:
+    case Phase::STOPPED:
+        // nothing to do
         ;
     }
 }
@@ -200,28 +199,32 @@ void LedStrip_UART_DMA::handle() {
 // BufferBase
 
 LedStrip_UART_DMA::BufferBase::BufferBase(uint8_t *data, int capacity, LedStrip_UART_DMA &device)
-    : coco::Buffer(data, capacity, device.st.state), device(device)
+    : coco::Buffer(data, capacity, device.st.state), device_(device)
 {
-    device.buffers.add(*this);
+    device.buffers_.add(*this);
 }
 
 LedStrip_UART_DMA::BufferBase::~BufferBase() {
 }
 
 bool LedStrip_UART_DMA::BufferBase::start(Op op) {
-    if (this->st.state != State::READY) {
-        assert(this->st.state != State::BUSY);
+    if (st.state != State::READY) {
+        assert(st.state != State::BUSY);
         return false;
     }
 
     // check if WRITE flag is set
     assert((op & Op::WRITE) != 0);
 
-    auto &device = this->device;
+    auto &device = device_;
 
     // add to list of pending transfers and start immediately if list was empty
-    if (device.transfers.push(nvic::Guard(device.uartIrq), *this))
-        start();
+    {
+        // DMA irq does not need to be disabled because changes to the transfers queue are not done during DMA irq
+        nvic::Guard guard(device.uartIrq_);
+        if (device.transfers_.push(*this) && device.phase_ == Phase::STOPPED)
+            start();
+    }
 
     // set state
     setBusy();
@@ -230,29 +233,29 @@ bool LedStrip_UART_DMA::BufferBase::start(Op op) {
 }
 
 bool LedStrip_UART_DMA::BufferBase::cancel() {
-    if (this->st.state != State::BUSY)
+    if (st.state != State::BUSY)
         return false;
-    auto &device = this->device;
+    auto &device = device_;
 
     // remove from pending transfers if not yet started, otherwise complete normally
-    if (device.transfers.remove(nvic::Guard(device.uartIrq), *this, false))
+    if (device.transfers_.remove(nvic::Guard(device.uartIrq_), *this, false))
         setReady(0);
 
     return true;
 }
 
 void LedStrip_UART_DMA::BufferBase::start() {
-    auto &device = this->device;
+    auto &device = device_;
 
     // set data
-    device.data = this->p.data;
-    device.end = this->p.data + this->p.size;
+    device.data_ = data_;
+    device.end_ = data_ + size_;
 
     // connect tx pin to UART
-    gpio::setMode(device.txPin, gpio::Mode::ALTERNATE);
+    gpio::setMode(device.txPin_, gpio::Mode::ALTERNATE);
 
     // start
-    device.phase = Phase::COPY;
+    device.phase_ = Phase::COPY;
     device.handle();
 }
 

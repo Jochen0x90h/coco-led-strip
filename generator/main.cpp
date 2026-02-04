@@ -22,13 +22,13 @@ void writeTable(std::ofstream &f, std::span<int> table) {
 	f << "};" << std::endl;
 }
 
-// generate lookup table for I2S interface
+// generate lookup table for I2S interface (MSB first)
 void generateI2S(const std::string &path) {
 	std::cout << "Generate " << path << std::endl;
 
 	int table[256];
 	for (int j = 0; j < std::size(table); ++j) {
-		// 24 bit value containing 8 times [start DATA stop] bits
+		// 24 bit value containing 8 times this sequence: [start DATA stop]
 		int entry = 0b100100100100100100100100;
 		//             ^  ^  ^  ^  ^  ^  ^  ^
 		//             7  6  5  4  3  2  1  0
@@ -51,26 +51,31 @@ void generateI2S(const std::string &path) {
 	f.close();
 }
 
-// generate lookup table for 7 bit UART interface
+// generate lookup table for 7 bit UART interface (LSB first)
 void generateUART(const std::string &path) {
 	std::cout << "Generate " << path << std::endl;
 
 	int table[64];
 	for (int j = 0; j < std::size(table); ++j) {
-		// 16 bit value containing two times [dummy DATA stop start DATA stop start DATA] bits
+		// 16 bit value containing two times this sequence: [dummy DATA stop start DATA stop start DATA]
 		int entry = 0b0010010000100100;
 		//             ^  ^  ^ ^  ^  ^
 		//             0  1  2 3  4  5
 
 		// set the 6 data bits
 		for (int i = 0; i < 6; ++i) {
+			// check if bit is set
 			if (j & (1 << i)) {
+				// calc bit position
 				int bitPosition = 14 - (i * 3 + (i < 3 ? 0 : -1));
+
+				// set bit
 				entry |= 1 << bitPosition;
 			}
 		}
 
-		table[j] = entry;
+		// invert as start and stop bit of UART are also inverted
+		table[j] = entry ^ 0xffff;
 	}
 
 	std::ofstream f(path);

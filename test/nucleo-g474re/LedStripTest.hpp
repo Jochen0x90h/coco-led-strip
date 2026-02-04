@@ -3,7 +3,6 @@
 #include <coco/platform/Loop_TIM2.hpp>
 #include <coco/platform/LedStrip_UART_DMA.hpp>
 #include <coco/board/config.hpp>
-#include <coco/debug.hpp>
 
 
 using namespace coco;
@@ -16,9 +15,9 @@ struct Drivers {
 
 	using LedStrip = LedStrip_UART_DMA;
 	LedStrip ledStrip{loop,
-		//gpio::Config::PA9 | gpio::Config::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (CN5 1)
-		gpio::Config::PC4 | gpio::Config::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (CN9 2)
-		usart::USART1_INFO,
+		//gpio::PA9 | gpio::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (CN5 1)
+		gpio::PC4 | gpio::AF7 | gpio::Config::SPEED_HIGH, // USART1 TX (CN9 2)
+		uart::USART1_INFO,
 		dma::DMA1_CH1_INFO,
 		USART1_CLOCK,
 		1125ns, // bit time T
