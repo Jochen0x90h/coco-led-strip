@@ -114,6 +114,8 @@ void LedStrip_I2S::handle() {
             // notify the application that the buffer is finished (next buffer can be started only after reset time)
             transfers_.pop(
                 [this](BufferBase &buffer) {
+                    buffer.setSuccess();
+
                     // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
                     loop_.push(buffer);
                     return true;
@@ -172,7 +174,7 @@ void LedStrip_I2S::handle() {
             transfers_.visitFirst(
                 [](BufferBase &next) {
                     // start next transfer if there is one
-                    next.start();
+                    next.startTx();
                 }
             );
         }
@@ -225,7 +227,7 @@ void LedStrip_I2S::handle() {
 // BufferBase
 
 LedStrip_I2S::BufferBase::BufferBase(uint8_t *data, int capacity, LedStrip_I2S &device)
-    : coco::Buffer(data, capacity, device.st.state), device_(device)
+    : coco::Buffer(data, capacity, device.state_), device_(device)
 {
     device.buffers_.add(*this);
 }
@@ -233,14 +235,12 @@ LedStrip_I2S::BufferBase::BufferBase(uint8_t *data, int capacity, LedStrip_I2S &
 LedStrip_I2S::BufferBase::~BufferBase() {
 }
 
-bool LedStrip_I2S::BufferBase::start(Op op) {
-    if (st.state != State::READY) {
-        assert(st.state != State::BUSY);
+bool LedStrip_I2S::BufferBase::start() {
+    if (state_ != State::READY || (op_ & Op::WRITE) == 0 || size_ == 0) {
+        assert(state_ != State::BUSY);
+        setSuccess();
         return false;
     }
-
-    // check if WRITE flag is set
-    assert((op & Op::WRITE) != 0);
 
     auto &device = device_;
 
@@ -248,7 +248,7 @@ bool LedStrip_I2S::BufferBase::start(Op op) {
     {
         nvic::Guard guard(I2S_IRQn);
         if (device.transfers_.push(*this) && device.phase_ >= Phase::IDLE)
-            start();
+            startTx();
     }
 
     // set state
@@ -258,21 +258,21 @@ bool LedStrip_I2S::BufferBase::start(Op op) {
 }
 
 bool LedStrip_I2S::BufferBase::cancel() {
-    if (st.state != State::BUSY)
+    if (state_ != State::BUSY)
         return false;
     auto &device = device_;
 
     // remove from pending transfers if not yet started, otherwise complete normally
-    if (device.transfers_.remove(nvic::Guard(I2S_IRQn), *this, false)) {
-        // cancel succeeded: set buffer ready again
-        // resume application code, therefore interrupt should be enabled at this point
-        setReady(0);
+    if (device.transfers_.remove(nvic::Guard(I2S_IRQn), *this, false) == 1) {
+        // cancel succeeded: set buffer ready again (note that interrpt is enabled again)
+        setError(std::errc::operation_canceled);
+        setReady();
     }
 
     return true;
 }
 
-void LedStrip_I2S::BufferBase::start() {
+void LedStrip_I2S::BufferBase::startTx() {
     //gpio::setOutput(gpio::Config::P0_19, false);
 
     auto &device = device_;

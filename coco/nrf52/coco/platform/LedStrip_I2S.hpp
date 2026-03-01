@@ -47,11 +47,11 @@ public:
         ~BufferBase() override;
 
         // Buffer methods
-        bool start(Op op) override;
+        bool start() override;
         bool cancel() override;
 
     protected:
-        void start();
+        void startTx();
         void handle() override;
 
         LedStrip_I2S &device_;

@@ -6,7 +6,7 @@ namespace coco {
 
 LedStrip_emu::LedStrip_emu(Loop_emu &loop)
     : BufferDevice(State::READY)
-    , loop(loop)
+    , loop_(loop)
 {
     loop.guiHandlers.add(*this);
 }
@@ -15,20 +15,21 @@ LedStrip_emu::~LedStrip_emu() {
 }
 
 int LedStrip_emu::getBufferCount() {
-    return this->buffers.count();
+    return buffers_.count();
 }
 
 LedStrip_emu::Buffer &LedStrip_emu::getBuffer(int index) {
-    return this->buffers.get(index);
+    return buffers_.get(index);
 }
 
 void LedStrip_emu::handle(Gui &gui) {
-    auto buffer = this->transfers.pop();
-    if (buffer != nullptr) {
-        gui.draw<GuiLedStrip>(buffer->data_, buffer->size_ / 3);
-        buffer->setReady();
-    } else {
-        // draw emulated LED strip with previous content
+    auto result = transfers_.pop([&gui](auto &buffer) {
+        gui.draw<GuiLedStrip>(buffer.data_, buffer.size_ / 3);
+        buffer.setSuccess();
+        buffer.setReady();
+    });
+    if (!result) {
+        // no buffer: draw emulated LED strip with previous content
         gui.draw<GuiLedStrip>();
     }
 }
@@ -37,27 +38,25 @@ void LedStrip_emu::handle(Gui &gui) {
 // Buffer
 
 LedStrip_emu::Buffer::Buffer(int length, LedStrip_emu &device)
-    : coco::Buffer(new uint8_t[length * 3], length * 3, device.st.state)
-    , device(device)
+    : coco::Buffer(new uint8_t[length * 3], length * 3, device.state_)
+    , device_(device)
 {
-    device.buffers.add(*this);
+    device.buffers_.add(*this);
 }
 
 LedStrip_emu::Buffer::~Buffer() {
-    delete [] this->data_;
+    delete [] data_;
 }
 
-bool LedStrip_emu::Buffer::start(Op op) {
-    if (this->st.state != State::READY) {
-        assert(this->st.state != State::BUSY);
+bool LedStrip_emu::Buffer::start() {
+    if (state_ != State::READY || (op_ & Op::WRITE) == 0 || size_ == 0) {
+        assert(state_ != State::BUSY);
+        setSuccess();
         return false;
     }
 
-    // check if WRITE flag is set
-    assert((op & Op::WRITE) != 0);
-
     // add buffer to list of transfers. No need to start first transfer as LedStrip_emu::handle() gets called periodically
-    this->device.transfers.push(*this);
+    device_.transfers_.push(*this);
 
     // set state
     setBusy();
@@ -66,10 +65,13 @@ bool LedStrip_emu::Buffer::start(Op op) {
 }
 
 bool LedStrip_emu::Buffer::cancel() {
-    if (this->st.state != State::BUSY)
+    if (state_ != State::BUSY)
         return false;
 
-    setReady(0);
+    device_.transfers_.remove(*this);
+    setError(std::errc::operation_canceled);
+    setReady();
+
     return true;
 }
 

@@ -6,35 +6,31 @@
 
 namespace coco {
 
-/**
- * Implementation of a LED strip emulator that shows the LED strip on the emulator gui
- */
+/// @brief Implementation of a LED strip emulator that shows the LED strip on the emulator gui.
+///
 class LedStrip_emu : public BufferDevice, public Loop_emu::GuiHandler {
 public:
     LedStrip_emu(Loop_emu &loop);
     ~LedStrip_emu() override;
 
-    /**
-     * Buffer for transferring data to a LED strip
-     */
+    /// @brief Buffer for transferring data to a LED strip.
+    ///
     class Buffer : public coco::Buffer, public IntrusiveListNode, public IntrusiveQueueNode {
         friend class LedStrip_emu;
     public:
-        /**
-         * Constructor
-         * @param length length of emulated LED strip, i.e. number of RGB triples
-         * @param device emulator device
-         */
+        /// @brief Constructor.
+        /// @param length length of emulated LED strip, i.e. number of RGB triples
+        /// @param device emulator device
         Buffer(int length, LedStrip_emu &device);
         ~Buffer() override;
 
         // Buffer methods
-        bool start(Op op) override;
+        bool start() override;
         bool cancel() override;
 
     protected:
 
-        LedStrip_emu &device;
+        LedStrip_emu &device_;
     };
 
 
@@ -45,13 +41,13 @@ public:
 protected:
     void handle(Gui &gui) override;
 
-    Loop_native &loop;
+    Loop_native &loop_;
 
     // list of buffers
-    IntrusiveList<Buffer> buffers;
+    IntrusiveList<Buffer> buffers_;
 
     // list of active transfers
-    IntrusiveQueue<Buffer> transfers;
+    IntrusiveQueue<Buffer> transfers_;
 };
 
 } // namespace coco

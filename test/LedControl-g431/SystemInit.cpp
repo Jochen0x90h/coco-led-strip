@@ -34,10 +34,10 @@ void __attribute__((weak)) SystemInit() {
 
     // configure PLL: 16MHz / 1 * 20 = 320MHz
     RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI // source is internal oscillator HSI16
-        | ((1 - 1) << RCC_PLLCFGR_PLLM_Pos) // PLL M divisor
-        | (20 << RCC_PLLCFGR_PLLN_Pos) // PLL N multiplier
-        | RCC_PLLCFGR_PLLREN // enable PLL R output, PLLR: 320MHz / 2 = 160MHz (set SYS_CLOCK in config.hpp accordingly)
-        | RCC_PLLCFGR_PLLPEN // enable PLL P output (for ADC)
+        | ((1 - 1) << RCC_PLLCFGR_PLLM_Pos) // /M
+        | (20 << RCC_PLLCFGR_PLLN_Pos) // *N
+        | RCC_PLLCFGR_PLLREN // enable PLLR output, PLLR: 320MHz / 2 = 160MHz (set SYS_CLOCK in config.hpp accordingly)
+        | RCC_PLLCFGR_PLLPEN // enable PLLP output (for ADC)
         | (7 << RCC_PLLCFGR_PLLPDIV_Pos); // PLLP: 320MHz / 7 = 45.7MHz
 
     // enable internal oscillator and PLL
