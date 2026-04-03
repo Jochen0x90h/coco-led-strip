@@ -118,7 +118,7 @@ void LedStrip_I2S::handle() {
 
                     // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
                     loop_.push(buffer);
-                    return true;
+                    //return true;
                 }
             );
 
@@ -236,8 +236,12 @@ LedStrip_I2S::BufferBase::~BufferBase() {
 }
 
 bool LedStrip_I2S::BufferBase::start() {
-    if (state_ != State::READY || (op_ & Op::WRITE) == 0 || size_ == 0) {
-        assert(state_ != State::BUSY);
+    if (state_ != State::READY) {
+        assert(false);
+        setError(std::errc::resource_unavailable_try_again);
+        return false;
+    }
+    if ((op_ & Op::WRITE) == 0 || size_ == 0) {
         setSuccess();
         return false;
     }
@@ -263,7 +267,7 @@ bool LedStrip_I2S::BufferBase::cancel() {
     auto &device = device_;
 
     // remove from pending transfers if not yet started, otherwise complete normally
-    if (device.transfers_.remove(nvic::Guard(I2S_IRQn), *this, false) == 1) {
+    if (device.transfers_.removeButFirst(nvic::Guard(I2S_IRQn), *this) == 1) {
         // cancel succeeded: set buffer ready again (note that interrpt is enabled again)
         setError(std::errc::operation_canceled);
         setReady();

@@ -142,7 +142,7 @@ protected:
     IntrusiveList<BufferBase> buffers_;
 
     // list of active transfers
-    InterruptQueue<BufferBase> transfers_;
+    InterruptQueue2<BufferBase> transfers_;
 
     // data to transfer
     uint8_t *data_;

@@ -30,7 +30,8 @@ struct Drivers {
         dma::DMA1_CH1_INFO,
         USART1_CLOCK,
         1125ns, // bit time T
-        75us}; // reset time
+        300us}; // reset time (WS2811 and WS2812B need >= 280us)
+
     LedStrip::Buffer<LEDSTRIP_LENGTH * 3> buffer1{ledStrip};
     LedStrip::Buffer<LEDSTRIP_LENGTH * 3> buffer2{ledStrip};
 

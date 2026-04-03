@@ -42,12 +42,12 @@ struct SingleBufferStrip {
 
     // get array of colors, only valid until show() is called
     Array<Color> array() {
-        return {this->buffer.pointer<Color>(), this->count};
+        return {reinterpret_cast<Color *>(buffer.data()), count};
     }
 
     [[nodiscard]] Awaitable<Buffer::Events> show() {
         // write buffer
-        return this->buffer.write(this->count * sizeof(Color));
+        return this->buffer.write(count * sizeof(Color));
     }
 };
 
@@ -60,26 +60,26 @@ struct DoubleBufferStrip {
     Buffer *buffer;
 
     DoubleBufferStrip(Buffer &buffer1, Buffer &buffer2) : buffers{&buffer1, &buffer2} {
-        this->count = std::min(buffer1.capacity(), buffer2.capacity()) / sizeof(Color);
-        this->buffer = &buffer1;
+        count = std::min(buffer1.capacity(), buffer2.capacity()) / sizeof(Color);
+        buffer = &buffer1;
     }
 
-    int size() {return this->count;}
+    int size() {return count;}
 
     // get array of colors, only valid until show() is called
     Array<Color> array() {
-        return {this->buffer->pointer<Color>(), this->count};
+        return {reinterpret_cast<Color *>(buffer->data()), count};
     }
 
     [[nodiscard]] Awaitable<Buffer::Events> show() {
         // start writeing buffer
-        this->buffer->startWrite(this->count * sizeof(Color));
+        buffer->startWrite(count * sizeof(Color));
 
         // toggle buffer
-        this->buffer = this->buffer == this->buffers[0] ? this->buffers[1] : this->buffers[0];
+        buffer = buffer == buffers[0] ? buffers[1] : buffers[0];
 
         // wait until other buffer is finished
-        return this->buffer->untilReadyOrDisabled();
+        return buffer->untilReadyOrDisabled();
     }
 };
 

@@ -49,8 +49,12 @@ LedStrip_emu::Buffer::~Buffer() {
 }
 
 bool LedStrip_emu::Buffer::start() {
-    if (state_ != State::READY || (op_ & Op::WRITE) == 0 || size_ == 0) {
-        assert(state_ != State::BUSY);
+    if (state_ != State::READY) {
+        assert(false);
+        setError(std::errc::resource_unavailable_try_again);
+        return false;
+    }
+    if ((op_ & Op::WRITE) == 0 || size_ == 0) {
         setSuccess();
         return false;
     }
