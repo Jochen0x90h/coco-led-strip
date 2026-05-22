@@ -39,7 +39,7 @@ public:
     Buffer &getBuffer(int index) override;
 
 protected:
-    void handle(Gui &gui) override;
+    void onGui(Gui &gui) override;
 
     Loop_native &loop_;
 
@@ -48,6 +48,8 @@ protected:
 
     // list of active transfers
     IntrusiveQueue<Buffer> transfers_;
+
+    std::vector<uint8_t> data_;
 };
 
 } // namespace coco

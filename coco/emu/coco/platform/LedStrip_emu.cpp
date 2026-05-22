@@ -8,6 +8,10 @@ LedStrip_emu::LedStrip_emu(Loop_emu &loop)
     : BufferDevice(State::READY)
     , loop_(loop)
 {
+    // ensure that strip is initially black
+    data_.assign(3, 0);
+
+    // add to gui handlers of event loop
     loop.guiHandlers.add(*this);
 }
 
@@ -22,16 +26,19 @@ LedStrip_emu::Buffer &LedStrip_emu::getBuffer(int index) {
     return buffers_.get(index);
 }
 
-void LedStrip_emu::handle(Gui &gui) {
-    auto result = transfers_.pop([&gui](auto &buffer) {
-        gui.draw<GuiLedStrip>(buffer.data_, buffer.size_ / 3);
+void LedStrip_emu::onGui(Gui &gui) {
+    transfers_.pop([this, &gui](auto &buffer) {
+        // get data
+        uint8_t *data = buffer.data_;
+        int size = buffer.size_;
+        data_.assign(data, data + size);
+
         buffer.setSuccess();
         buffer.setReady();
     });
-    if (!result) {
-        // no buffer: draw emulated LED strip with previous content
-        gui.draw<GuiLedStrip>();
-    }
+
+    // draw led strip
+    gui.draw<GuiLedStrip>(data_.data(), data_.size() / 3);
 }
 
 

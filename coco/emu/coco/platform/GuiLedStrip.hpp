@@ -5,10 +5,8 @@
 
 namespace coco {
 
-/**
- * LED strip on the emulator gui.
- * Usage: gui.draw<GuiLedStrip>(buffer, length);
- */
+/// @brief LED strip on the emulator gui.
+/// Usage: gui.draw<GuiLedStrip>(buffer, length);
 class GuiLedStrip : public Gui::Renderer {
 public:
     GuiLedStrip();

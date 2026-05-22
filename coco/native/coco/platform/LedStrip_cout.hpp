@@ -8,14 +8,14 @@ namespace coco {
 
 /// @brief Implementation of a LED strip emulator that shows the LED strip on the console using std::cout.
 ///
-class LedStrip_cout : public BufferDevice {
+class LedStrip_cout : public BufferDevice, public Loop_native::TimeoutHandler {
 public:
     LedStrip_cout(Loop_native &loop);
     ~LedStrip_cout() override;
 
     /// @brief Buffer for transferring data to a LED strip.
     ///
-    class Buffer : public coco::Buffer, public IntrusiveListNode, public IntrusiveQueueNode {
+    class Buffer : public coco::Buffer, public coco::IntrusiveListNode, public IntrusiveQueueNode {
         friend class LedStrip_cout;
     public:
         /// @brief Constructor
@@ -39,7 +39,7 @@ public:
     Buffer &getBuffer(int index) override;
 
 protected:
-    void handle();
+    void onTimeout() override;
 
     struct Color {
         uint8_t r;
@@ -48,7 +48,7 @@ protected:
     };
 
     Loop_native &loop_;
-    TimedTask<Callback> callback_;
+    //TimedTask<Callback<>> callback_;
 
     // list of buffers
     IntrusiveList<Buffer> buffers_;

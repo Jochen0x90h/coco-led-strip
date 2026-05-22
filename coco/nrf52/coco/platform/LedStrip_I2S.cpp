@@ -112,7 +112,7 @@ void LedStrip_I2S::handle() {
             //gpio::setOutput(gpio::Config::P0_19, true);
 
             // notify the application that the buffer is finished (next buffer can be started only after reset time)
-            transfers_.pop(
+            /*transfers_.pop(
                 [this](BufferBase &buffer) {
                     buffer.setSuccess();
 
@@ -120,7 +120,14 @@ void LedStrip_I2S::handle() {
                     loop_.push(buffer);
                     //return true;
                 }
-            );
+            );*/
+            auto buffer = transfers_.pop();
+            if (buffer != nullptr) {
+                buffer->setSuccess();
+
+                // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
+                loop_.push(*buffer);
+            }
 
             // update LED buffer fill size
             size_ = size + (end - begin);
@@ -267,7 +274,7 @@ bool LedStrip_I2S::BufferBase::cancel() {
     auto &device = device_;
 
     // remove from pending transfers if not yet started, otherwise complete normally
-    if (device.transfers_.removeButFirst(nvic::Guard(I2S_IRQn), *this) == 1) {
+    if (device.transfers_.guardedRemoveExceptFirst(nvic::Guard(I2S_IRQn), *this)) {
         // cancel succeeded: set buffer ready again (note that interrpt is enabled again)
         setError(std::errc::operation_canceled);
         setReady();
@@ -307,7 +314,7 @@ void LedStrip_I2S::BufferBase::startTx() {
         i2s->TASKS_START = TRIGGER;
 }
 
-void LedStrip_I2S::BufferBase::handle() {
+void LedStrip_I2S::BufferBase::onCompletion() {
     setReady();
 }
 

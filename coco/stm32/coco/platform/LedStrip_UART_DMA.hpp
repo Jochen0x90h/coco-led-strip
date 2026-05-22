@@ -70,7 +70,7 @@ public:
 
 
     // internal buffer base class, derives from IntrusiveListNode for the list of buffers and Loop_Queue::Handler to be notified from the event loop
-    class BufferBase : public coco::Buffer, public IntrusiveListNode, public Loop_Queue::Handler {
+    class BufferBase : public coco::Buffer, public IntrusiveListNode, public Loop_Queue::CompletionHandler {
         friend class LedStrip_UART_DMA;
     public:
         /// @brief Constructor
@@ -86,7 +86,7 @@ public:
 
     protected:
         void startTx();
-        void handle() override;
+        void onCompletion() override;
 
         LedStrip_UART_DMA &device_;
     };
@@ -124,6 +124,7 @@ public:
     }
 
 protected:
+    // interrupt handler
     void handle();
 
     Loop_Queue &loop_;
@@ -142,7 +143,7 @@ protected:
     IntrusiveList<BufferBase> buffers_;
 
     // list of active transfers
-    InterruptQueue2<BufferBase> transfers_;
+    InterruptQueue<BufferBase> transfers_;
 
     // data to transfer
     uint8_t *data_;

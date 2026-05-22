@@ -1,5 +1,5 @@
 #include "LedStrip_UART_DMA.hpp"
-//#include <coco/debug.hpp>
+#include <coco/debug.hpp>
 
 
 namespace {
@@ -128,7 +128,7 @@ void LedStrip_UART_DMA::handle() {
             // copy data finished  (application buffer is not accessed any more)
 
             // notify the application that the buffer is finished (next buffer can be started only after reset time)
-            transfers_.pop(
+            /*transfers_.pop(
                 [this](BufferBase &buffer) {
                     buffer.setSuccess();
 
@@ -136,7 +136,14 @@ void LedStrip_UART_DMA::handle() {
                     loop_.push(buffer);
                     //return true;
                 }
-            );
+            );*/
+            auto buffer = transfers_.pop();
+            if (buffer != nullptr) {
+                buffer->setSuccess();
+
+                // push finished transfer buffer to event loop so that BufferBase::handle() gets called from the event loop
+                loop_.push(*buffer);
+            }
 
             // enable DMA (without transfer complete interrupt, we use UART transmission complete interrupt instead
             // because we want to disable the tx pin after the last bit was sent)
@@ -242,7 +249,7 @@ bool LedStrip_UART_DMA::BufferBase::cancel() {
     auto &device = device_;
 
     // remove from pending transfers if not yet started, otherwise complete normally
-    if (device.transfers_.removeButFirst(nvic::Guard(device.uartIrq_), *this)) {
+    if (device.transfers_.guardedRemoveExceptFirst(nvic::Guard(device.uartIrq_), *this)) {
         // cancel succeeded: set buffer ready again (note that interrpt is enabled again)
         setError(std::errc::operation_canceled);
         setReady();
@@ -266,7 +273,7 @@ void LedStrip_UART_DMA::BufferBase::startTx() {
     device.handle();
 }
 
-void LedStrip_UART_DMA::BufferBase::handle() {
+void LedStrip_UART_DMA::BufferBase::onCompletion() {
     setReady();
 }
 

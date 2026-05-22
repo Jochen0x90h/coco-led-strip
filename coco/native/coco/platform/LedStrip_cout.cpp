@@ -7,7 +7,8 @@ namespace coco {
 
 LedStrip_cout::LedStrip_cout(Loop_native &loop)
     : BufferDevice(State::READY)
-    , loop_(loop), callback_(makeCallback<LedStrip_cout, &LedStrip_cout::handle>(this))
+    , loop_(loop)
+    //, callback_(makeCallback<LedStrip_cout, &LedStrip_cout::onTimeout>(this))
 {
 }
 
@@ -22,7 +23,7 @@ LedStrip_cout::Buffer &LedStrip_cout::getBuffer(int index) {
     return buffers_.get(index);
 }
 
-void LedStrip_cout::handle() {
+void LedStrip_cout::onTimeout() {
     transfers_.pop([this](auto &buffer) {
         // https://stackoverflow.com/questions/30097953/ascii-art-sorting-an-array-of-ascii-characters-by-brightness-levels-c-c
         static const char lookup[] = " `.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@@";
@@ -42,7 +43,7 @@ void LedStrip_cout::handle() {
 
         // check if there are more buffers in the list
         if (!transfers_.empty())
-            loop_.invoke(callback_);
+            loop_.invoke(*this);
     });
 }
 
@@ -73,7 +74,7 @@ bool LedStrip_cout::Buffer::start() {
 
     // add buffer to list of transfers and let event loop call LedStrip_cout::handle() when the first was added
     if (device_.transfers_.push(*this))
-        device_.loop_.invoke(device_.callback_);
+        device_.loop_.invoke(device_);
 
     // set state
     setBusy();
