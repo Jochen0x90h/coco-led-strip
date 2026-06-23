@@ -45,7 +45,7 @@ struct SingleBufferStrip {
         return {reinterpret_cast<Color *>(buffer.data()), count};
     }
 
-    [[nodiscard]] Awaitable<Buffer::Events> show() {
+    [[nodiscard]] auto show() {
         // write buffer
         return this->buffer.write(count * sizeof(Color));
     }
@@ -71,7 +71,7 @@ struct DoubleBufferStrip {
         return {reinterpret_cast<Color *>(buffer->data()), count};
     }
 
-    [[nodiscard]] Awaitable<Buffer::Events> show() {
+    [[nodiscard]] auto show() {
         // start writeing buffer
         buffer->startWrite(count * sizeof(Color));
 
