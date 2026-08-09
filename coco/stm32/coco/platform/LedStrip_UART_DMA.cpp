@@ -11,8 +11,8 @@ namespace coco {
 
 // LedStrip_UART_DMA
 
-LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin,
-    const UartInfo &uartInfo, const dma::Info<> &dmaInfo, uint32_t brr, int resetCount)
+LedStrip_UART_DMA::LedStrip_UART_DMA(Loop_Queue &loop, const UartInfo &uartInfo, gpio::Config txPin,
+    const dma::Info<> &dmaInfo, uint32_t brr, int resetCount)
     : BufferDevice(State::READY)
     , loop_(loop)
     , txPin_(txPin)

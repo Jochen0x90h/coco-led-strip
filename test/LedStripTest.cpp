@@ -144,6 +144,23 @@ Coroutine colorRamps(Loop &loop, S &strip) {
     }
 }
 
+// white
+template <typename S>
+Coroutine white(Loop &loop, S &strip, int brightness) {
+    while (true) {
+        auto leds = strip.array();
+        int count = leds.size();
+        for (int i = 0; i < count; ++i) {
+            Color &color = leds[i];
+
+            color.r = brightness;
+            color.g = brightness;
+            color.b = brightness;
+        }
+        co_await strip.show();
+        //debug::out << "show\n";
+    }
+}
 
 int main() {
     debug::out << "LedStripTest\n";
@@ -153,9 +170,11 @@ int main() {
 
     // test correct assignment of RGB channels
     // LEDs should fade on/off up in this order R, G, B, off, R, G, B, off ...
-    testRgb(drivers.loop, strip);
+    //testRgb(drivers.loop, strip);
 
     //colorRamps(drivers.loop, strip);
+
+    white(drivers.loop, strip, 100);
 
     drivers.loop.run();
     return 0;

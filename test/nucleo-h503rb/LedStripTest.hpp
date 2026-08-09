@@ -15,8 +15,8 @@ struct Drivers {
 
     using LedStrip = LedStrip_UART_DMA;
     LedStrip ledStrip{loop,
-        gpio::PB14 | gpio::AF4 | gpio::Config::SPEED_HIGH, // USART1 TX (CN9 2)
         uart::USART1_INFO,
+        gpio::PB14 | gpio::AF4 | gpio::Config::SPEED_HIGH, // USART1 TX (CN9 2)
         dma::DMA1_CH0_INFO,
         USART1_CLOCK,
         1125ns, // bit time T

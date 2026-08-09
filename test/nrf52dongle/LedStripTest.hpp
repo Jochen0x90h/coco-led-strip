@@ -11,21 +11,21 @@ constexpr int LEDSTRIP_LENGTH = 300;
 
 // drivers for LedStripTest
 struct Drivers {
-	Loop_RTC0 loop;
-	LedStrip_I2S ledStrip{loop,
-		gpio::P1_14, // SCK (not needed, but needs a valid pin)
-		gpio::P0_2,// LRCK (not needed, but needs a valid pin)
-		gpio::P0_3, // data
-		1125ns, // bit time T
-		75us}; // reset time
-	LedStrip_I2S::Buffer<LEDSTRIP_LENGTH * 3> buffer1{ledStrip};
-	LedStrip_I2S::Buffer<LEDSTRIP_LENGTH * 3> buffer2{ledStrip};
+    Loop_RTC0 loop;
+    LedStrip_I2S ledStrip{loop,
+        gpio::P1_14, // SCK (not needed, but needs a valid pin)
+        gpio::P0_2,// LRCK (not needed, but needs a valid pin)
+        gpio::P0_3, // data
+        1125ns, // bit time T
+        75us}; // reset time
+    LedStrip_I2S::Buffer<LEDSTRIP_LENGTH * 3> buffer1{ledStrip};
+    LedStrip_I2S::Buffer<LEDSTRIP_LENGTH * 3> buffer2{ledStrip};
 };
 
 Drivers drivers;
 
 extern "C" {
 void I2S_IRQHandler() {
-	drivers.ledStrip.I2S_IRQHandler();
+    drivers.ledStrip.I2S_IRQHandler();
 }
 }

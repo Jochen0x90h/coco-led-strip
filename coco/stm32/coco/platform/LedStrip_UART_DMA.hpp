@@ -45,25 +45,25 @@ protected:
 
     /// @brief Internal constructor
     /// @param loop Event loop
+    /// @param uartInfo Info of USART/UART instance to use
     /// @param txPin Transmit (TX) pin and alternative function (see data sheet) that transmits data to the LED strip, supports INVERT flag
-    /// @param usartInfo Info of USART/UART instance to use
     /// @param dmaInfo Info of DMA channel to use
     /// @param brr Contents of baud rate register
     /// @param resetCount Number of bytes to send during reset time, e.g. 20μs / T = 20μs / 1125ns = 18.6667 -> 19 bytes
-    LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin,
-        const UartInfo &uartInfo, const dma::Info<> &dmaInfo, uint32_t brr, int resetCount);
+    LedStrip_UART_DMA(Loop_Queue &loop, const UartInfo &uartInfo, gpio::Config txPin,
+        const dma::Info<> &dmaInfo, uint32_t brr, int resetCount);
 public:
     /// @brief Constructor
     /// @param loop Event loop
+    /// @param uartInfo Info of USART/UART instance to use
     /// @param txPin Transmit (TX) pin and alternative function (see data sheet) that transmits data to the LED strip, supports INVERT flag
-    /// @param usartInfo Info of USART/UART instance to use
     /// @param dmaInfo Info of DMA channel to use
     /// @param clock Peripheral clock frequency (APB1_CLOCK or APB2_CLOCK depending on USART)
     /// @param bitTime Bit time T where T0H is T/3 and T1H is 2T/3, e.g. T = 1125ns -> T0H = 375ns, T1H = 750ns
     /// @param resetTime Reset time in us, e.g. 20μs
-    LedStrip_UART_DMA(Loop_Queue &loop, gpio::Config txPin, const UartInfo &uartInfo, const dma::Info<> &dmaInfo,
+    LedStrip_UART_DMA(Loop_Queue &loop, const UartInfo &uartInfo, gpio::Config txPin, const dma::Info<> &dmaInfo,
         Kilohertz<> clock, Nanoseconds<> bitTime, Microseconds<> resetTime)
-        : LedStrip_UART_DMA(loop, txPin, uartInfo, dmaInfo,
+        : LedStrip_UART_DMA(loop, uartInfo, txPin, dmaInfo,
         std::max(int(clock * bitTime / 3) + 1, 8), int(clock / ((int(clock * bitTime / 3) + 1) * 9) * resetTime)) {}
 
     ~LedStrip_UART_DMA() override;
