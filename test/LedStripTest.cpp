@@ -172,9 +172,10 @@ int main() {
     // LEDs should fade on/off up in this order R, G, B, off, R, G, B, off ...
     //testRgb(drivers.loop, strip);
 
-    //colorRamps(drivers.loop, strip);
+    colorRamps(drivers.loop, strip);
 
-    white(drivers.loop, strip, 100);
+    // test maximum power consumption
+    //white(drivers.loop, strip, 255);
 
     drivers.loop.run();
     return 0;
